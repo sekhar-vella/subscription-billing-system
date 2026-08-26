@@ -8,3 +8,5 @@ class SignupRequest(BaseModel):
 class SigninRequest(BaseModel):
     email: EmailStr
     password: str
+class SubscriptionStatusUpdate(BaseModel):
+    status: str

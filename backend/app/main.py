@@ -7,6 +7,9 @@ from datetime import datetime, timedelta
 from app.database import Base, engine, SessionLocal
 from app import models
 from app.schemas import SignupRequest, SigninRequest
+from datetime import datetime
+from app.schemas import SubscriptionStatusUpdate
+from app.subscription_state import validate_status_transition
 SECRET_KEY = "subscription-billing-secret-key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -166,4 +169,42 @@ def home(current_user: models.User = Depends(get_current_user)):
         "message": f"Welcome {current_user.name}!",
         "user_id": current_user.id,
         "email": current_user.email
+    }
+@app.patch("/subscriptions/{subscription_id}/status")
+def update_subscription_status(
+    subscription_id: int,
+    status_update: SubscriptionStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    subscription = (
+        db.query(models.Subscription)
+        .filter(models.Subscription.id == subscription_id)
+        .first()
+    )
+
+    if subscription is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Subscription not found"
+        )
+
+    old_status = subscription.status
+
+    validate_status_transition(
+        old_status,
+        status_update.status
+    )
+
+    subscription.status = status_update.status
+    subscription.status_changed_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(subscription)
+
+    return {
+        "message": "Subscription status updated successfully",
+        "subscription_id": subscription.id,
+        "old_status": old_status,
+        "new_status": subscription.status,
+        "status_changed_at": subscription.status_changed_at
     }

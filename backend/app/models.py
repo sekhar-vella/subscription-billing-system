@@ -48,6 +48,7 @@ class Subscription(Base):
     plan_id = Column(Integer, nullable=False)
 
     status = Column(String, nullable=False)
+    status_changed_at = Column(DateTime,default=datetime.utcnow,nullable=False)
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=True)
 
