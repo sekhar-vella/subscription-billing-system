@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, Numeric, JSON, DateTime
 
 from app.database import Base
-
+from sqlalchemy import Boolean
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -16,7 +16,7 @@ class Plan(Base):
     billing_interval = Column(String, nullable=False)
     trial_days = Column(Integer, nullable=False)
     features = Column(JSON, nullable=True)
-
+    is_archived = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime,

@@ -9,6 +9,8 @@ from app import models
 from app.schemas import SignupRequest, SigninRequest
 from datetime import datetime
 from app.schemas import SubscriptionStatusUpdate
+from app.schemas import PlanCreate
+from app.schemas import PlanUpdate
 from app.subscription_state import validate_status_transition
 SECRET_KEY = "subscription-billing-secret-key"
 ALGORITHM = "HS256"
@@ -207,4 +209,123 @@ def update_subscription_status(
         "old_status": old_status,
         "new_status": subscription.status,
         "status_changed_at": subscription.status_changed_at
+    }
+@app.post("/plans")
+def create_plan(
+    plan: PlanCreate,
+    db: Session = Depends(get_db)
+):
+    new_plan = models.Plan(
+        name=plan.name,
+        price=plan.price,
+        billing_interval=plan.billing_interval,
+        trial_days=plan.trial_days,
+        features=plan.features
+    )
+    db.add(new_plan)
+    db.commit()
+    db.refresh(new_plan)
+
+    return {
+        "message": "Plan created successfully",
+        "plan_id": new_plan.id,
+        "name": new_plan.name,
+        "price": new_plan.price,
+        "billing_interval": new_plan.billing_interval,
+        "trial_days": new_plan.trial_days,
+        "features": new_plan.features
+    }
+@app.get("/plans")
+def list_plans(
+    db: Session = Depends(get_db)
+):
+    plans = db.query(models.Plan).all()
+
+    return plans
+@app.put("/plans/{plan_id}")
+def update_plan(
+    plan_id: int,
+    plan_data: PlanUpdate,
+    db: Session = Depends(get_db)
+):
+    plan = (
+        db.query(models.Plan)
+        .filter(models.Plan.id == plan_id)
+        .first()
+    )
+
+    if plan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Plan not found"
+        )
+
+    plan.name = plan_data.name
+    plan.price = plan_data.price
+    plan.billing_interval = plan_data.billing_interval
+    plan.trial_days = plan_data.trial_days
+    plan.features = plan_data.features
+
+    db.commit()
+    db.refresh(plan)
+
+    return {
+        "message": "Plan updated successfully",
+        "plan_id": plan.id,
+        "name": plan.name,
+        "price": plan.price,
+        "billing_interval": plan.billing_interval,
+        "trial_days": plan.trial_days,
+        "features": plan.features
+    }
+@app.patch("/plans/{plan_id}/archive")
+def archive_plan(
+    plan_id: int,
+    db: Session = Depends(get_db)
+):
+    plan = (
+        db.query(models.Plan)
+        .filter(models.Plan.id == plan_id)
+        .first()
+    )
+
+    if plan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Plan not found"
+        )
+
+    plan.is_archived = True
+
+    db.commit()
+    db.refresh(plan)
+
+    return {
+        "message": "Plan archived successfully",
+        "plan_id": plan.id,
+        "is_archived": plan.is_archived
+    }
+@app.delete("/plans/{plan_id}")
+def delete_plan(
+    plan_id: int,
+    db: Session = Depends(get_db)
+):
+    plan = (
+        db.query(models.Plan)
+        .filter(models.Plan.id == plan_id)
+        .first()
+    )
+
+    if plan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Plan not found"
+        )
+
+    db.delete(plan)
+    db.commit()
+
+    return {
+        "message": "Plan deleted successfully",
+        "plan_id": plan_id
     }
