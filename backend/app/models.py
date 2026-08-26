@@ -4,7 +4,9 @@ from sqlalchemy import Column, Integer, String, Numeric, JSON, DateTime
 
 from app.database import Base
 
+from passlib.context import CryptContext
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 class Plan(Base):
     __tablename__ = "plans"
 
@@ -131,3 +133,17 @@ class AuditLog(Base):
     performed_by = Column(String, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False, unique=True, index=True)
+    password_hash = Column(String, nullable=False)
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
