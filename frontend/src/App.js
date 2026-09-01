@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Signup from "./Signup";
 import Signin from "./Signin";
 import Home from "./Home";
+import "./App.css";
 
 function App() {
   return (

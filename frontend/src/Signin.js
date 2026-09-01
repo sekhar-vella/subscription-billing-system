@@ -17,55 +17,53 @@ function Signin() {
         }
       );
 
-      // Get JWT token from backend
       const token = response.data.access_token;
-
-      // Save token in browser
       localStorage.setItem("token", token);
 
       alert("Signin successful!");
-
-      // Go to Home page
       window.location.href = "/home";
     } catch (error) {
-      alert(
-        error.response?.data?.detail || "Signin failed"
-      );
+      alert(error.response?.data?.detail || "Signin failed");
     }
   };
 
   return (
-    <div>
-      <h1>Sign In</h1>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="logo-circle">💳</div>
 
-      <form onSubmit={handleSignin}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <h1>Welcome Back</h1>
+        <p className="subtitle">Sign in to your Subscription Billing account</p>
 
-        <br />
-        <br />
+        <form onSubmit={handleSignin}>
+          <label>Email</label>
+          <input
+            type="email"
+            placeholder="Enter your email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+          <label>Password</label>
+          <input
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
 
-        <br />
-        <br />
+          <button className="primary-btn" type="submit">
+            Sign In
+          </button>
+        </form>
 
-        <button type="submit">Sign In</button>
-      </form>
-
-      <p>
-        Don't have an account?{" "}
-        <a href="/signup">Create Account</a>
-      </p>
+        <p className="switch-text">
+          Don't have an account?{" "}
+          <a href="/signup">Create Account</a>
+        </p>
+      </div>
     </div>
   );
 }

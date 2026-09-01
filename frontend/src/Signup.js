@@ -13,9 +13,9 @@ function Signup() {
       const response = await axios.post(
         "http://localhost:8000/signup",
         {
-          name: name,
-          email: email,
-          password: password
+          name,
+          email,
+          password
         }
       );
 
@@ -28,47 +28,53 @@ function Signup() {
   };
 
   return (
-    <div>
-      <h1>Create Account</h1>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="logo-circle">💳</div>
 
-      <form onSubmit={handleSignup}>
-        <input
-          type="text"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
+        <h1>Create Account</h1>
+        <p className="subtitle">
+          Create your Subscription Billing account
+        </p>
 
-        <br /><br />
+        <form onSubmit={handleSignup}>
+          <label>Name</label>
+          <input
+            type="text"
+            placeholder="Enter your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
+          <label>Email</label>
+          <input
+            type="email"
+            placeholder="Enter your email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
 
-        <br /><br />
+          <label>Password</label>
+          <input
+            type="password"
+            placeholder="Create a password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+          <button className="primary-btn" type="submit">
+            Create Account
+          </button>
+        </form>
 
-        <br /><br />
-
-        <button type="submit">Sign Up</button>
-      </form>
-
-      <p>
-        Already have an account?{" "}
-        <a href="/">Sign In</a>
-      </p>
+        <p className="switch-text">
+          Already have an account?{" "}
+          <a href="/">Sign In</a>
+        </p>
+      </div>
     </div>
   );
 }
