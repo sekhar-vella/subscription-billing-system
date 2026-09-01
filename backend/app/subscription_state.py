@@ -2,9 +2,10 @@ from fastapi import HTTPException
 
 
 ALLOWED_TRANSITIONS = {
-    "trial": {"active", "cancelled"},
-    "active": {"past_due", "cancelled"},
-    "past_due": {"active", "cancelled"},
+    "trial": {"active", "cancelled", "paused"},
+    "active": {"past_due", "cancelled", "paused"},
+    "past_due": {"active", "cancelled", "paused"},
+    "paused": {"active", "cancelled"},
     "cancelled": set(),
 }
 

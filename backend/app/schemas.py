@@ -22,3 +22,18 @@ class PlanUpdate(BaseModel):
     billing_interval: str
     trial_days: int
     features: dict | None = None
+class CustomerCreate(BaseModel):
+    name: str
+    email: EmailStr
+    company_name: str | None = None
+
+
+class CustomerUpdate(BaseModel):
+    name: str
+    email: EmailStr
+    company_name: str | None = None
+class SubscriptionCreate(BaseModel):
+    customer_id: int
+    plan_id: int
+class SubscriptionChangePlan(BaseModel):
+    plan_id: int
