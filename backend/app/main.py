@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
+from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt
 from datetime import datetime, timedelta
 from app.database import Base, engine, SessionLocal
@@ -13,7 +14,7 @@ from app.schemas import SubscriptionStatusUpdate
 from app.schemas import PlanCreate
 from app.schemas import PlanUpdate
 from app.audit_service import create_audit_log
-from app.schemas import SubscriptionCreate
+from app.schemas import SubscriptionCreate, InvoiceResponse
 from app.billing_cycle_service import create_billing_cycle
 from app.subscription_state import validate_status_transition
 SECRET_KEY = "subscription-billing-secret-key"
@@ -30,6 +31,13 @@ app = FastAPI(
     title="Subscription Billing Automation System",
     description="Backend API for subscription and billing management",
     version="1.0.0",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -591,6 +599,7 @@ def change_subscription_plan(
     plan_data: SubscriptionChangePlan,
     db: Session = Depends(get_db)
 ):
+    # 1. Get current subscription
     subscription = (
         db.query(models.Subscription)
         .filter(models.Subscription.id == subscription_id)
@@ -603,32 +612,105 @@ def change_subscription_plan(
             detail="Subscription not found"
         )
 
-    plan = (
+    # 2. Get current plan
+    current_plan = (
+        db.query(models.Plan)
+        .filter(models.Plan.id == subscription.plan_id)
+        .first()
+    )
+
+    if current_plan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Current plan not found"
+        )
+
+    # 3. Get new plan
+    new_plan = (
         db.query(models.Plan)
         .filter(models.Plan.id == plan_data.plan_id)
         .first()
     )
 
-    if plan is None:
+    if new_plan is None:
         raise HTTPException(
             status_code=404,
-            detail="Plan not found"
+            detail="New plan not found"
         )
 
-    if subscription.status == "cancelled":
+    # 4. Validate subscription
+    if subscription.status != "active":
         raise HTTPException(
             status_code=400,
-            detail="Cannot change plan for cancelled subscription"
+            detail="Plan change is allowed only for active subscriptions"
         )
 
-    old_plan_id = subscription.plan_id
+    if current_plan.id == new_plan.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Subscription is already on this plan"
+        )
 
-    subscription.plan_id = plan_data.plan_id
+    # 5. Get current billing cycle
+    billing_cycle = (
+        db.query(models.BillingCycle)
+        .filter(
+            models.BillingCycle.subscription_id == subscription.id
+        )
+        .order_by(models.BillingCycle.id.desc())
+        .first()
+    )
+
+    if billing_cycle is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Billing cycle not found"
+        )
+
+    # 6. Calculate remaining days
+    today = datetime.utcnow()
+
+    total_cycle_days = (
+        billing_cycle.cycle_end_date - billing_cycle.cycle_start_date
+    ).days
+
+    remaining_days = (
+        billing_cycle.cycle_end_date - today
+    ).days
+
+    if remaining_days < 0:
+        remaining_days = 0
+
+    if total_cycle_days <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid billing cycle"
+        )
+
+    # 7. Calculate unused current plan amount (CREDIT)
+    old_daily_amount = float(current_plan.price) / total_cycle_days
+    credit = old_daily_amount * remaining_days
+
+    # 8. Calculate new plan cost for remaining period (DEBIT)
+    new_daily_amount = float(new_plan.price) / total_cycle_days
+    charge = new_daily_amount * remaining_days
+
+    # 9. Calculate final amount due
+    amount_due = charge - credit
+
+    # Round to 2 decimal places
+    credit = round(credit, 2)
+    charge = round(charge, 2)
+    amount_due = round(amount_due, 2)
+
+    # 10. Update subscription to new plan
+    old_plan_id = subscription.plan_id
+    subscription.plan_id = new_plan.id
 
     db.commit()
     db.refresh(subscription)
 
-    # Create audit log
+    # 11. Store proration details in audit log
     create_audit_log(
         db=db,
         entity_type="subscription",
@@ -638,7 +720,11 @@ def change_subscription_plan(
             "plan_id": old_plan_id
         },
         new_value={
-            "plan_id": subscription.plan_id
+            "plan_id": new_plan.id,
+            "remaining_days": remaining_days,
+            "credit": credit,
+            "charge": charge,
+            "amount_due": amount_due
         }
     )
 
@@ -646,7 +732,11 @@ def change_subscription_plan(
         "message": "Subscription plan changed successfully",
         "subscription_id": subscription.id,
         "old_plan_id": old_plan_id,
-        "new_plan_id": subscription.plan_id
+        "new_plan_id": new_plan.id,
+        "remaining_days": remaining_days,
+        "credit": credit,
+        "charge": charge,
+        "amount_due": amount_due
     }
 
 
@@ -776,3 +866,75 @@ def cancel_subscription(
         "old_status": old_status,
         "new_status": subscription.status
     }
+@app.post("/invoices/generate", response_model=InvoiceResponse)
+def generate_invoice(
+    subscription_id: int,
+    db: Session = Depends(get_db)
+):
+    subscription = db.query(models.Subscription).filter(
+        models.Subscription.id == subscription_id
+    ).first()
+
+    if subscription is None:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+
+    if subscription.status not in ["active", "trial"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invoice can only be generated for active subscriptions"
+        )
+
+    customer = db.query(models.Customer).filter(
+        models.Customer.id == subscription.customer_id
+    ).first()
+
+    plan = db.query(models.Plan).filter(
+        models.Plan.id == subscription.plan_id
+    ).first()
+
+    if customer is None or plan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Customer or Plan not found"
+        )
+
+    invoice_number = f"INV-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+
+    subtotal = float(plan.price)
+    tax_amount = 0.0
+    total_amount = subtotal + tax_amount
+
+    invoice = models.Invoice(
+        invoice_number=invoice_number,
+        subscription_id=subscription.id,
+        customer_id=customer.id,
+        invoice_date=datetime.utcnow(),
+        due_date=datetime.utcnow() + timedelta(days=7),
+        subtotal=subtotal,
+        tax_amount=tax_amount,
+        total_amount=total_amount,
+        status="unpaid"
+    )
+
+    db.add(invoice)
+    db.commit()
+    db.refresh(invoice)
+
+    return invoice
+@app.get("/invoices", response_model=list[InvoiceResponse])
+def get_invoices(db: Session = Depends(get_db)):
+    invoices = db.query(models.Invoice).all()
+    return invoices
+@app.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
+def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = db.query(models.Invoice).filter(
+        models.Invoice.id == invoice_id
+    ).first()
+
+    if invoice is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Invoice not found"
+        )
+
+    return invoice
